@@ -1,4 +1,7 @@
-const { Server } = require("yjs-server");
+import { WebSocketServer } from "ws";
+import { createYjsServer } from "yjs-server";
+import * as Y from "yjs";
+import http from "http";
 
 // Get API key from environment variable
 const VALID_API_KEY = process.env.API_KEY;
@@ -8,42 +11,63 @@ if (!VALID_API_KEY) {
   process.exit(1);
 }
 
-// Create a new server instance
-const server = new Server({
-  port: process.env.PORT || 1234,
-  // Add authentication middleware
-  onConnect: (ws, req) => {
-    const apiKey = req.headers["x-api-key"];
-
-    if (apiKey !== VALID_API_KEY) {
-      console.log("Authentication failed: Invalid API key");
-      ws.close(4001, "Invalid API key");
-      return false;
-    }
-
-    console.log("Client authenticated successfully");
-    return true;
-  },
-  // Disable persistence as requested
-  persistence: null,
+// Create HTTP server
+const httpServer = http.createServer((request, response) => {
+  response.writeHead(200, { "Content-Type": "text/plain" });
+  response.end("YJS Sync Server");
 });
 
-// Log when server starts
-server.on("listening", () => {
-  console.log(`Yjs Sync Server is running on port ${process.env.PORT || 1234}`);
+// Create WebSocket server
+const wss = new WebSocketServer({ noServer: true });
+
+// Create YJS server
+const yjss = createYjsServer({
+  createDoc: () => new Y.Doc(),
+  logger: console,
 });
 
-// Log connection events
-server.on("connection", () => {
-  console.log("New client connected");
+// Handle WebSocket connections
+wss.on("connection", (socket, request) => {
+  // Authenticate connection
+  const whenAuthorized = authorize(socket, request).catch(() => {
+    socket.close(4001, "Unauthorized");
+    return false;
+  });
+
+  // Handle connection with authentication
+  yjss.handleConnection(socket, request, whenAuthorized);
 });
 
-// Log disconnection events
-server.on("disconnection", () => {
-  console.log("Client disconnected");
+// Authorization function
+async function authorize(socket, request) {
+  const url = new URL(request.url, `http://${request.headers.host}`);
+  const apiKey = url.searchParams.get("apiKey");
+
+  if (apiKey !== VALID_API_KEY) {
+    console.log("Authentication failed: Invalid API key");
+    return false;
+  }
+
+  console.log("Client authenticated successfully");
+  return true;
+}
+
+// Handle upgrade requests
+httpServer.on("upgrade", (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit("connection", ws, request);
+  });
 });
 
-// Log any errors
-server.on("error", (err) => {
-  console.error("Server error:", err);
+// Start server
+const port = process.env.PORT || 1234;
+httpServer.listen(port, () => {
+  console.log(`Yjs Sync Server is running on port ${port}`);
+});
+
+// Handle server shutdown
+process.on("SIGTERM", () => {
+  console.log("Shutting down server...");
+  yjss.close();
+  httpServer.close();
 });
