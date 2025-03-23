@@ -1,0 +1,14 @@
+{
+  "name": "yjs-sync-server",
+  "version": "1.0.0",
+  "description": "Simple sync server using yjs-server",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "yjs-server": "^0.2.3"
+  }
+}
