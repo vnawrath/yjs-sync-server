@@ -17,7 +17,7 @@ EXPOSE 1234
 
 # Set environment variables with defaults
 ENV PORT=1234
-ENV API_KEY=""
+ENV API_KEY="change-me"
 
 # Start the server
 CMD ["node", "index.js"] 
