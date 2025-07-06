@@ -11,8 +11,39 @@ if (!VALID_API_KEY) {
   process.exit(1);
 }
 
+// Track active rooms and their connection counts
+const activeRooms = new Map();
+
 // Create HTTP server
 const httpServer = http.createServer((request, response) => {
+  const url = new URL(request.url, `http://${request.headers.host}`);
+
+  // Handle rooms listing endpoint
+  if (url.pathname === "/rooms" && request.method === "GET") {
+    // Check API key authorization
+    const apiKey = url.searchParams.get("apiKey");
+    if (apiKey !== VALID_API_KEY) {
+      response.writeHead(401, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+
+    // Return list of active rooms
+    const rooms = Array.from(activeRooms.entries()).map(
+      ([roomName, connections]) => ({
+        name: roomName,
+        connections: connections,
+      })
+    );
+
+    response.writeHead(200, {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    });
+    response.end(JSON.stringify({ rooms }));
+    return;
+  }
+
   response.writeHead(200, { "Content-Type": "text/plain" });
   response.end("YJS Sync Server");
 });
@@ -24,14 +55,43 @@ const wss = new WebSocketServer({ noServer: true });
 const yjss = createYjsServer({
   createDoc: () => new Y.Doc(),
   logger: console,
+  onDocumentCreate: (docName) => {
+    console.log(`Document created: ${docName}`);
+    activeRooms.set(docName, (activeRooms.get(docName) || 0) + 1);
+  },
+  onDocumentDestroy: (docName) => {
+    console.log(`Document destroyed: ${docName}`);
+    const count = activeRooms.get(docName) || 0;
+    if (count <= 1) {
+      activeRooms.delete(docName);
+    } else {
+      activeRooms.set(docName, count - 1);
+    }
+  },
 });
 
 // Handle WebSocket connections
 wss.on("connection", (socket, request) => {
+  // Extract room name from URL
+  const url = new URL(request.url, `http://${request.headers.host}`);
+  const roomName = url.pathname.slice(1); // Remove leading slash
+
   // Authenticate connection
   const whenAuthorized = authorize(socket, request).catch(() => {
     socket.close(4001, "Unauthorized");
     return false;
+  });
+
+  // Track room connection
+  socket.on("close", () => {
+    if (roomName) {
+      const count = activeRooms.get(roomName) || 0;
+      if (count <= 1) {
+        activeRooms.delete(roomName);
+      } else {
+        activeRooms.set(roomName, count - 1);
+      }
+    }
   });
 
   // Handle connection with authentication

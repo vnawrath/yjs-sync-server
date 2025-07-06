@@ -6,6 +6,7 @@ A simple and secure WebSocket server for synchronizing [Yjs](https://yjs.dev/) d
 
 - WebSocket-based real-time synchronization
 - API key authentication for security
+- **Room listing endpoint to discover active rooms**
 - Simple deployment with environment variable configuration
 
 ## Getting Started
@@ -73,6 +74,62 @@ const provider = new WebsocketProvider(
 
 // Now you can use the doc and it will sync automatically
 ```
+
+## Getting List of Active Rooms
+
+You can get a list of currently active rooms by making an HTTP GET request to the `/rooms` endpoint:
+
+### Using JavaScript/Fetch
+
+```javascript
+async function getActiveRooms() {
+  try {
+    const response = await fetch(
+      "http://localhost:1234/rooms?apiKey=your-secret-api-key"
+    );
+    const data = await response.json();
+    console.log("Active rooms:", data.rooms);
+    return data.rooms;
+  } catch (error) {
+    console.error("Error fetching rooms:", error);
+  }
+}
+
+// Example usage
+getActiveRooms().then((rooms) => {
+  rooms.forEach((room) => {
+    console.log(`Room: ${room.name}, Connections: ${room.connections}`);
+  });
+});
+```
+
+### Using cURL
+
+```bash
+curl "http://localhost:1234/rooms?apiKey=your-secret-api-key"
+```
+
+The response will be in the format:
+
+```json
+{
+  "rooms": [
+    {
+      "name": "document-name-1",
+      "connections": 3
+    },
+    {
+      "name": "document-name-2",
+      "connections": 1
+    }
+  ]
+}
+```
+
+## API Endpoints
+
+- `GET /rooms?apiKey=<your-api-key>` - Returns list of active rooms with connection counts
+- WebSocket connections at `ws://localhost:1234/<room-name>?apiKey=<your-api-key>`
 
 ## Deployment
 
