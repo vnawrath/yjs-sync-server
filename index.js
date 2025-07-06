@@ -14,9 +14,34 @@ if (!VALID_API_KEY) {
 // Track active rooms and their connection counts
 const activeRooms = new Map();
 
+// CORS headers helper function
+function setCORSHeaders(response) {
+  response.setHeader("Access-Control-Allow-Origin", "*");
+  response.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS"
+  );
+  response.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  );
+  response.setHeader("Access-Control-Allow-Credentials", "false");
+  response.setHeader("Access-Control-Max-Age", "86400"); // 24 hours
+}
+
 // Create HTTP server
 const httpServer = http.createServer((request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
+
+  // Set CORS headers for all requests
+  setCORSHeaders(response);
+
+  // Handle preflight requests (OPTIONS method)
+  if (request.method === "OPTIONS") {
+    response.writeHead(200);
+    response.end();
+    return;
+  }
 
   // Handle rooms listing endpoint
   if (url.pathname === "/rooms" && request.method === "GET") {
@@ -43,7 +68,6 @@ const httpServer = http.createServer((request, response) => {
     console.log(`Formatted rooms response:`, rooms);
     response.writeHead(200, {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
     });
     response.end(JSON.stringify({ rooms }));
     return;
