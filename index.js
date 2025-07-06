@@ -28,14 +28,19 @@ const httpServer = http.createServer((request, response) => {
       return;
     }
 
+    // Update room tracking before responding
+    updateRoomTracking();
+
     // Return list of active rooms
     const rooms = Array.from(activeRooms.entries()).map(
       ([roomName, connections]) => ({
-        name: roomName,
+        name: roomName || "unnamed-room",
         connections: connections,
       })
     );
 
+    console.log(`Room listing requested. Active rooms Map:`, activeRooms);
+    console.log(`Formatted rooms response:`, rooms);
     response.writeHead(200, {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
@@ -51,30 +56,32 @@ const httpServer = http.createServer((request, response) => {
 // Create WebSocket server
 const wss = new WebSocketServer({ noServer: true });
 
-// Create YJS server
+// Create YJS server with simple document creation (no room tracking here)
 const yjss = createYjsServer({
-  createDoc: () => new Y.Doc(),
+  createDoc: () => {
+    console.log("Creating Y.Doc (no room tracking at createDoc level)");
+    return new Y.Doc();
+  },
   logger: console,
-  onDocumentCreate: (docName) => {
-    console.log(`Document created: ${docName}`);
-    activeRooms.set(docName, (activeRooms.get(docName) || 0) + 1);
-  },
-  onDocumentDestroy: (docName) => {
-    console.log(`Document destroyed: ${docName}`);
-    const count = activeRooms.get(docName) || 0;
-    if (count <= 1) {
-      activeRooms.delete(docName);
-    } else {
-      activeRooms.set(docName, count - 1);
-    }
-  },
 });
 
 // Handle WebSocket connections
 wss.on("connection", (socket, request) => {
-  // Extract room name from URL
+  console.log("New WebSocket connection");
+
+  // Extract room name from the request URL
   const url = new URL(request.url, `http://${request.headers.host}`);
   const roomName = url.pathname.slice(1); // Remove leading slash
+  console.log(`Connection URL: ${request.url}`);
+  console.log(`Extracted room name: "${roomName}"`);
+
+  // If we have a valid room name, track it
+  if (roomName && roomName !== "") {
+    activeRooms.set(roomName, (activeRooms.get(roomName) || 0) + 1);
+    console.log(
+      `Room "${roomName}" now has ${activeRooms.get(roomName)} connection(s)`
+    );
+  }
 
   // Authenticate connection
   const whenAuthorized = authorize(socket, request).catch(() => {
@@ -82,21 +89,52 @@ wss.on("connection", (socket, request) => {
     return false;
   });
 
-  // Track room connection
+  // Track disconnections to clean up rooms
   socket.on("close", () => {
-    if (roomName) {
+    console.log("WebSocket connection closed");
+    if (roomName && roomName !== "") {
       const count = activeRooms.get(roomName) || 0;
       if (count <= 1) {
         activeRooms.delete(roomName);
+        console.log(`Room "${roomName}" removed (no more connections)`);
       } else {
         activeRooms.set(roomName, count - 1);
+        console.log(`Room "${roomName}" now has ${count - 1} connection(s)`);
       }
     }
+    // Also update room tracking from yjs-server docs
+    updateRoomTracking();
   });
 
   // Handle connection with authentication
   yjss.handleConnection(socket, request, whenAuthorized);
 });
+
+// Function to update room tracking from yjs-server's internal document store
+function updateRoomTracking() {
+  // Don't clear existing tracking - just supplement it
+
+  // Access yjs-server's internal document store
+  if (yjss.docs) {
+    console.log("Updating room tracking from yjs-server docs...");
+    console.log("Available docs in yjs-server:", Array.from(yjss.docs.keys()));
+
+    for (const [docName, doc] of yjss.docs) {
+      if (docName && docName !== "" && docName !== "undefined") {
+        // Only update if we don't already have this room tracked
+        if (!activeRooms.has(docName)) {
+          activeRooms.set(docName, 1);
+          console.log(`Found new active room: "${docName}"`);
+        }
+      }
+    }
+  }
+
+  console.log(
+    "Room tracking updated. Current rooms:",
+    Array.from(activeRooms.keys())
+  );
+}
 
 // Authorization function
 async function authorize(socket, request) {

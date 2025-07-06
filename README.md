@@ -131,6 +131,8 @@ The response will be in the format:
 - `GET /rooms?apiKey=<your-api-key>` - Returns list of active rooms with connection counts
 - WebSocket connections at `ws://localhost:1234/<room-name>?apiKey=<your-api-key>`
 
+**Note:** The room name is passed in the WebSocket URL path, not as a parameter to the WebsocketProvider constructor. For example, if you want to connect to a room called "my-document", the WebSocket URL would be `ws://localhost:1234/my-document?apiKey=your-api-key`.
+
 ## Deployment
 
 When deploying to production:
